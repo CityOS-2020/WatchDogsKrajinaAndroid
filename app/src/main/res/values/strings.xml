@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">WatchdogsKrajina</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="btn_text_centriraj">Centriraj!</string>
+    <string name="action_settings">Settings</string>
+</resources>

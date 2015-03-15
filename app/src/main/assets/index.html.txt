@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style type="text/css">
+html, body, #map-canvas { position: relative; height: 100%; margin: 0; padding: 0;}
+
+.modal {
+  text-align: center;
+}
+
+.modal:before {
+  display: inline-block;
+  vertical-align: middle;
+  content: " ";
+  height: 100%;
+}
+
+.modal-dialog {
+  display: inline-block;
+  text-align: left;
+  vertical-align: middle;
+}
+</style>
+<script type="text/javascript"
+src="https://maps.googleapis.com/maps/api/js?sensor=false">
+</script>
+
+<link rel="stylesheet" type="text/css" href="../bootstrap.min.css">
+<script src="../socket.io.js"></script>
+<script src="../jquery.min.js"></script>
+<script src="../bootstrap.min.js"></script>
+<script src="../bootbox.min.js"></script>
+<script type="text/javascript">
+
+var centriraj;
+var zamijeni;
+var me;
+var transport = true;
+function initialize() {
+  var markers=[];
+  var directionsDisplay;
+  var directionsService = new google.maps.DirectionsService();
+  //var distanceService = new google.maps.DistanceMatrixService();
+  var mapOptions = {
+    center: { lat: 43.8496569, lng: 18.3736896},
+    zoom: 14,
+    mapTypeId: "OSM",
+    mapTypeControl: false,
+    streetViewControl: false
+  };
+
+  var map = new google.maps.Map(document.getElementById('map-canvas'),
+  mapOptions);
+  directionsDisplay = new google.maps.DirectionsRenderer();
+
+  directionsDisplay.setMap(map);
+
+
+  map.mapTypes.set("OSM", new google.maps.ImageMapType({
+    getTileUrl: function(coord, zoom) {
+      return "http://tile.thunderforest.com/transport/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
+    },
+    tileSize: new google.maps.Size(256, 256),
+    name: "OpenStreetMap",
+    maxZoom: 18
+  }));
+
+
+  function removeMarkers(){
+    for(var i=0;i<markers.length;i++){
+      markers[i].setMap(null);
+    }
+    markers = [];
+  }
+
+  var socket = io.connect('http://watchdogskrajina.herokuapp.com/');
+  socket.on('gps', function (data) {
+    console.log(data);
+    var t = data.objekti;
+    removeMarkers();
+    //alert(t);
+
+    for(var i=0;i<t.length;i++){
+      var ikona = "";
+      if(t[i].label == 'taxi')
+        ikona = 'https://mt.googleapis.com/vt/icon/name=icons/onion/1103-biz-taxi.png';
+      if(t[i].label == 'tram')
+        ikona = 'https://mt.googleapis.com/vt/icon/name=icons/onion/1461-trans-tram-alt.png';
+      if(t[i].label == 'train')
+        ikona = 'https://mt.googleapis.com/vt/icon/name=icons/onion/1455-trans-steam-train.png';
+      if(t[i].label == 'bus')
+        ikona = 'https://mt.googleapis.com/vt/icon/name=icons/onion/1423-trans-bus.png';
+      if(t[i].label == 'traffic')
+      {
+        var vrijeme = Date.now();
+        console.log(t[i]);
+        if( Math.abs(vrijeme-t[i].lastResponse) > 30000)
+          ikona = 'http://images.modells.com/images//products/en_us/nav_swatches/green.jpg';
+        else
+          ikona = 'http://www.footasylum.com/images/products/swatches/022907_swatch.jpg';
+      }
+      // var infowindow = new google.maps.InfoWindow({
+      //   content: "holding..."
+      // });
+      markers.push(new google.maps.Marker({
+        position: new google.maps.LatLng(t[i].lat,t[i].long),
+        map: map,
+        title: 'Otoka',
+        icon: ikona
+      }));
+      var test =  t[i];
+      google.maps.event.addListener(markers[i], 'click', function () {
+        bootbox.alert("Label: "+ test.label + "\nLat: "+ test.lat + "\nLong: " + test.long);
+        Udaljenost(0,0);
+        // infowindow.setContent("<script>alert(\"test\";)<script>")
+        // infowindow.open(map, markers[i-1]);
+      })
+    }
+    google.maps.event.addListener(map, 'click', function(event) {
+      //alert( "Latitude: "+event.latLng.lat()+" "+", longitude: "+event.latLng.lng() );
+      if(me){
+        Udaljenost(me.position.lat(),me.position.lng(),event.latLng.lat(),event.latLng.lng());
+      }
+    })
+
+  });
+  //test
+
+  centriraj = function(lat,long){
+    me = new google.maps.Marker({
+      position: new google.maps.LatLng(lat,long),
+      map: map,
+      title: 'Me',
+      icon: 'http://www.masrico.net/images/icons/location.png'
+    });
+    map.setZoom(18);
+    map.setCenter(new google.maps.LatLng(lat, long));
+  }
+  zamijeni = function (){
+    if(transport == true){
+      map.mapTypes.set("OSM", new google.maps.ImageMapType({
+        getTileUrl: function(coord, zoom) {
+          return "http://tile.openstreetmap.org/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
+        },
+        tileSize: new google.maps.Size(256, 256),
+        name: "OpenStreetMap",
+        maxZoom: 18
+      }));
+      transport = false;
+    }else{
+      map.mapTypes.set("OSM", new google.maps.ImageMapType({
+        getTileUrl: function(coord, zoom) {
+          return "http://tile.thunderforest.com/transport/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
+        },
+        tileSize: new google.maps.Size(256, 256),
+        name: "OpenStreetMap",
+        maxZoom: 18
+      }));
+      transport = true;
+
+    }
+
+  }
+
+  function Udaljenost(starLat,startLng, endLat,endLong){
+    var request = {
+      origin:new google.maps.LatLng(starLat, startLng),
+      destination:new google.maps.LatLng(endLat, endLong),
+      travelMode: google.maps.TravelMode.DRIVING
+    };
+
+    directionsService.route(request, function(result, status) {
+      if (status == google.maps.DirectionsStatus.OK) {
+        directionsDisplay.setDirections(result);
+        //alert(status);
+      }
+    });
+
+  }
+
+
+
+}
+
+
+
+google.maps.event.addDomListener(window, 'load', initialize);
+</script>
+</head>
+<body>
+  <div id="map-canvas"></div>
+</body>
+</html>
